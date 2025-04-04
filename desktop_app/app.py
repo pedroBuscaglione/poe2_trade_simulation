@@ -120,39 +120,46 @@ class TradeApp(QWidget):
         try:
             response = requests.get(API_URL)
             print("Fetching current inventory from API...")  # Debugging
+
             if response.status_code == 200:
                 items = response.json()
                 print(f"Current API Inventory: {items}")  # Debugging
+
                 for api_item in items:
                     if api_item["name"] == item_name:
                         item_id = api_item["id"]
 
-                        # If more than 1 quantity, update instead of deleting
+                        # If more than 1 quantity, update via POST request
                         if api_item["quantity"] > 1:
-                            updated_data = {
-                                "name": api_item["name"],
-                                "rarity": api_item["rarity"],
-                                "quantity": api_item["quantity"] - 1
-                            }
-                            print(f"Updating quantity of {item_name} to {api_item['quantity'] - 1}")  # Debugging
-                            update_response = requests.put(f"{API_URL}{item_id}/", json=updated_data)
-                            print(f"PUT Response Code: {update_response.status_code}")  # Debugging
-                            print(f"PUT Response Data: {update_response.text}")  # Debugging
+                            new_quantity = api_item["quantity"] - 1
+                            update_response = requests.post(
+                                f"{API_URL}{item_id}/update_quantity/",
+                                json={"quantity": new_quantity}
+                            )
+
+                            print(f"POST Response Code: {update_response.status_code}")  # Debugging
+                            print(f"POST Response Data: {update_response.text}")  # Debugging
+
                             if update_response.status_code == 200:
                                 self.inventory[selected_index]["quantity"] -= 1
+                            else:
+                                print("Error updating item in API")
+
                         else:
+                            # Delete if quantity reaches 0
                             print(f"Deleting item {item_name}")  # Debugging
                             delete_response = requests.delete(f"{API_URL}{item_id}/")
                             print(f"DELETE Response Code: {delete_response.status_code}")  # Debugging
+
                             if delete_response.status_code == 204:
                                 self.inventory.pop(selected_index)
 
                         self.update_inventory_display()
                         self.show_popup(f"Updated Inventory: {item_name}")
                         break
-
         except requests.exceptions.RequestException as e:
             print(f"Error updating/removing item: {e}")
+
 
 
     def filter_inventory(self):
