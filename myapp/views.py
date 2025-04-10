@@ -1,5 +1,5 @@
 from rest_framework.decorators import action
-from rest_framework import viewsets
+from rest_framework import viewsets, permissions
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.authtoken.views import ObtainAuthToken
@@ -11,16 +11,34 @@ from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.models import User
+from django.contrib import messages
 from .forms import RegisterForm
 
 class ItemViewSet(viewsets.ModelViewSet):
     queryset = Item.objects.all()
     serializer_class = ItemSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Só retorna os itens do usuário autenticado
+        return Item.objects.filter(owner=self.request.user)
+
+    def perform_create(self, serializer):
+        # Ao criar um item, define automaticamente o owner
+        serializer.save(owner=self.request.user)
 
     @action(detail=True, methods=['post'])
     def update_quantity(self, request, pk=None):
         """Custom endpoint to update item quantity"""
         item = self.get_object()
+
+        # Verifica se o item pertence ao usuário autenticado
+        if item.owner != request.user:
+            return Response({"error": "You do not have permission to modify this item."},
+                            status=status.HTTP_403_FORBIDDEN)
+
         new_quantity = request.data.get("quantity", None)
 
         if new_quantity is not None and int(new_quantity) >= 0:
@@ -41,16 +59,20 @@ def home(request):
 
 @login_required
 def trade_list(request):
-    items = Item.objects.all()
-    return render(request, 'trade_list.html', {'items': items})
+    items = Item.objects.filter(is_available=True).select_related('owner')
+    return render(request, 'myapp/trade.html', {'items': items})
 
 def register(request):
     if request.method == 'POST':
-        form = RegisterForm(request.POST)
+        form = UserCreationForm(request.POST)
         if form.is_valid():
-            user = form.save()
-            login(request, user)  # Automatically log the user in after registration
-            return redirect('home')  # or 'trade_list'
+            username = form.cleaned_data['username']
+            if User.objects.filter(username=username).exists():
+                messages.error(request, 'Username already taken. Please choose another.')
+            else:
+                form.save()
+                messages.success(request, 'Account created successfully! You can now log in.')
+                return redirect('login')
     else:
-        form = RegisterForm()
+        form = UserCreationForm()
     return render(request, 'register.html', {'form': form})
