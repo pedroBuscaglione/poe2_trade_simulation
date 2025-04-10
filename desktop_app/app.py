@@ -6,7 +6,9 @@ from PyQt5.QtWidgets import (
     QListWidget, QMessageBox, QLineEdit
 )
 
-API_URL = "http://127.0.0.1:8000/api/items/"  # Django API URL
+API_URL = "http://127.0.0.1:8000"  # Django API URL
+USERNAME = "Glione"
+PASSWORD = "Pe2005dro!@#"
 
 class TradeApp(QWidget):
     def __init__(self):
@@ -54,9 +56,27 @@ class TradeApp(QWidget):
     def fetch_inventory(self):
         """Fetch items from Django API and store their details."""
         try:
-            response = requests.get(API_URL)
-            print("API Response Status:", response.status_code)  # Debug
-            print("API Response Data:", response.text)  # Debug
+            def get_token():
+                url = f"{API_URL}/api-token-auth/"
+                data = {
+                    "username": USERNAME,
+                    "password": PASSWORD
+                }
+                response = requests.post(url, data=data)
+                if response.status_code == 200:
+                    return response.json()['token']
+                else:
+                    print("Erro ao obter token:", response.status_code, response.text)
+                    return None
+
+            # Pegando o token
+            token = get_token()
+            headers = {"Authorization": f"Token {token}"} if token else {}
+
+            # Exemplo: buscar itens
+            response = requests.get(f"{API_URL}/api/items/", headers=headers)
+            print("Status:", response.status_code)
+            print("Dados:", response.json())
             
             if response.status_code == 200:
                 items = response.json()

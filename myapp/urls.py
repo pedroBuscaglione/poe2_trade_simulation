@@ -4,7 +4,7 @@ from .views import ItemViewSet, CustomAuthToken
 from .views import home, trade_list, register
 
 router = DefaultRouter()
-router.register(r'items', ItemViewSet)  # Enables the new update_quantity route
+router.register(r'items', ItemViewSet, basename='item')  # Enables the new update_quantity route
 
 urlpatterns = [
     path('', home, name='home'),
