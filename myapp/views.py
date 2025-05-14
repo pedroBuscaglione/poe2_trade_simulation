@@ -58,9 +58,9 @@ def home(request):
     return render(request, 'home.html')
 
 @login_required
-def trade_list(request):
+def trade(request):
     items = Item.objects.filter(is_available=True).select_related('owner')
-    return render(request, 'myapp/trade.html', {'items': items})
+    return render(request, 'trade.html', {'items': items})
 
 def register(request):
     if request.method == 'POST':

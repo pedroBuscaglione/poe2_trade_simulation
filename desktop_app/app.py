@@ -3,81 +3,96 @@ import random
 import requests
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton, QLabel,
-    QListWidget, QMessageBox, QLineEdit
+    QListWidget, QMessageBox, QLineEdit, QHBoxLayout
 )
 
 API_URL = "http://127.0.0.1:8000"  # Django API URL
 USERNAME = "Glione"
 PASSWORD = "Pe2005dro!@#"
 
+
+def is_server_online():
+    try:
+        response = requests.get("http://127.0.0.1:8000")
+        return response.status_code == 200
+    except:
+        return False
+
+if not is_server_online():
+    print("⚠️ O servidor Django não está online. Execute `python manage.py runserver` e tente novamente.")
+    exit()
+
 class TradeApp(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("PoE Trade Simulator")
-        self.setGeometry(100, 100, 400, 500)
-
-        self.item_pool = [
-            "Chaos Orb", "Exalted Orb", "Divine Orb", "Mirror of Kalandra",
-            "Tabula Rasa", "Kaom's Heart", "Headhunter", "Berek's Grip"
-        ]
-
+        self.token = self.get_token() 
         self.inventory = self.fetch_inventory()  # Fetch items first!
+        self.init_ui()  
+        self.load_inventory()  # Load inventory after fetching
 
-        layout = QVBoxLayout()
+    def init_ui(self):
+        self.setWindowTitle("Trade Simulator - Inventário")
+        self.setGeometry(100, 100, 600, 400)
 
-        self.label = QLabel("Click to generate a new item!", self)
-        layout.addWidget(self.label)
+        # Layouts principais
+        main_layout = QVBoxLayout()
+        top_layout = QHBoxLayout()
+        bottom_layout = QHBoxLayout()
 
-        self.button = QPushButton("Generate Random Item", self)
-        self.button.clicked.connect(self.generate_item)
-        layout.addWidget(self.button)
+        # Campo de busca
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Buscar item...")
+        self.search_input.textChanged.connect(self.filter_inventory)
 
-        self.inventory_label = QLabel("Inventory:", self)
-        layout.addWidget(self.inventory_label)
+        # Botões
+        self.generate_button = QPushButton("Gerar Item Aleatório")
+        self.generate_button.clicked.connect(self.generate_item)
 
-        self.inventory_list = QListWidget(self)
-        layout.addWidget(self.inventory_list)
+        self.remove_button = QPushButton("Remover Item Selecionado")
+        self.remove_button.clicked.connect(self.remove_selected_item)
 
-        self.delete_button = QPushButton("Remove Selected Item", self)
-        self.delete_button.clicked.connect(self.remove_selected_item)
-        layout.addWidget(self.delete_button)
+        # Lista de inventário
+        self.inventory_list = QListWidget()
 
-        self.filter_input = QLineEdit(self)
-        self.filter_input.setPlaceholderText("Filter items...")
-        self.filter_input.textChanged.connect(self.filter_inventory)
-        layout.addWidget(self.filter_input)
+        # Montagem do layout
+        top_layout.addWidget(QLabel("Buscar:"))
+        top_layout.addWidget(self.search_input)
 
-        self.setLayout(layout)
+        bottom_layout.addWidget(self.generate_button)
+        bottom_layout.addWidget(self.remove_button)
 
-        # Call update after setting inventory
-        self.update_inventory_display()
+        main_layout.addLayout(top_layout)
+        main_layout.addWidget(self.inventory_list)
+        main_layout.addLayout(bottom_layout)
+
+        self.setLayout(main_layout)
+
+    def get_token(self):
+        url = f"{API_URL}/api-token-auth/"
+        data = {
+            "username": USERNAME,
+            "password": PASSWORD
+        }
+        try:
+            response = requests.post(url, data=data)
+            if response.status_code == 200:
+                print("🔐 Token obtido com sucesso.")
+                return response.json()['token']
+            else:
+                print("Erro ao obter token:", response.status_code, response.text)
+                return None
+        except requests.exceptions.RequestException as e:
+            print("Erro de conexão ao obter token:", e)
+            return None
 
     def fetch_inventory(self):
-        """Fetch items from Django API and store their details."""
         try:
-            def get_token():
-                url = f"{API_URL}/api-token-auth/"
-                data = {
-                    "username": USERNAME,
-                    "password": PASSWORD
-                }
-                response = requests.post(url, data=data)
-                if response.status_code == 200:
-                    return response.json()['token']
-                else:
-                    print("Erro ao obter token:", response.status_code, response.text)
-                    return None
-
-            # Pegando o token
-            token = get_token()
-            headers = {"Authorization": f"Token {token}"} if token else {}
-
-            # Exemplo: buscar itens
+            headers = {"Authorization": f"Token {self.token}"} if self.token else {}
             response = requests.get(f"{API_URL}/api/items/", headers=headers)
             print("Status:", response.status_code)
             print("Dados:", response.json())
-            
+
             if response.status_code == 200:
                 items = response.json()
                 return [
@@ -93,23 +108,48 @@ class TradeApp(QWidget):
         return []
 
     def generate_item(self):
-        """Generate a random item with rarity and quantity, then send it to the API."""
+        print("🛠️ Gerando item aleatório...")
+        # Monta o novo item
+        self.item_pool = ["Sword", "Wand", "Bow", "Staff"] 
         item_name = random.choice(self.item_pool)
         rarities = ["Common", "Magic", "Rare", "Unique"]
         rarity = random.choice(rarities)
-        quantity = random.randint(1, 10)  # Stackable items
+        quantity = random.randint(1, 10)
 
         data = {"name": item_name, "rarity": rarity, "quantity": quantity}
+        headers = {"Authorization": f"Token {self.token}"} if self.token else {}
 
         try:
-            response = requests.post(API_URL, json=data)
+            response = requests.post(f"{API_URL}/api/items/", json=data, headers=headers)
+            print("Status:", response.status_code, "Resposta:", response.text)
+
             if response.status_code == 201:
-                self.inventory.append(data)
+                print("✅ Item criado com sucesso!")
+
+                # Verifica se já existe no inventário local
+                for inv in self.inventory:
+                    if inv["name"] == item_name and inv["rarity"] == rarity:
+                        inv["quantity"] += quantity
+                        break
+                else:
+                    # não achou, adiciona
+                    self.inventory.append({
+                        "name": item_name,
+                        "rarity": rarity,
+                        "quantity": quantity
+                    })
+
                 self.update_inventory_display()
                 self.label.setText(f"Generated: {item_name}")
                 self.show_popup(f"You found: {item_name} ({rarity}) x{quantity}!")
-        except requests.exceptions.RequestException as e:
-            print(f"Error adding item: {e}")
+            else:
+                print("❌ Erro ao criar item:", response.status_code)
+        except Exception as e:
+            print("Erro ao enviar item:", e)
+
+    def load_inventory(self):
+        self.inventory = self.fetch_inventory()
+        self.update_inventory_display()
 
     def update_inventory_display(self, filtered_items=None):
         """Updates the inventory UI list with item details."""
@@ -138,7 +178,8 @@ class TradeApp(QWidget):
         print(f"Selected item to remove: {item_name}")  # Debugging
 
         try:
-            response = requests.get(API_URL)
+            headers = {"Authorization": f"Token {self.token}"} if self.token else {}
+            response = requests.get(f"{API_URL}/api/items/", headers=headers)
             print("Fetching current inventory from API...")  # Debugging
 
             if response.status_code == 200:
@@ -153,8 +194,9 @@ class TradeApp(QWidget):
                         if api_item["quantity"] > 1:
                             new_quantity = api_item["quantity"] - 1
                             update_response = requests.post(
-                                f"{API_URL}{item_id}/update_quantity/",
-                                json={"quantity": new_quantity}
+                                f"{API_URL}/api/items/{item_id}/update_quantity/",
+                                json={"quantity": new_quantity},
+                                headers=headers
                             )
 
                             print(f"POST Response Code: {update_response.status_code}")  # Debugging
@@ -168,7 +210,10 @@ class TradeApp(QWidget):
                         else:
                             # Delete if quantity reaches 0
                             print(f"Deleting item {item_name}")  # Debugging
-                            delete_response = requests.delete(f"{API_URL}{item_id}/")
+                            delete_response = requests.delete(
+                                f"{API_URL}/api/items/{item_id}/",
+                                headers=headers
+                            )
                             print(f"DELETE Response Code: {delete_response.status_code}")  # Debugging
 
                             if delete_response.status_code == 204:
@@ -185,7 +230,10 @@ class TradeApp(QWidget):
     def filter_inventory(self):
         """Filters inventory based on search input."""
         search_text = self.filter_input.text().lower()
-        filtered_items = [item for item in self.inventory if search_text in item.lower()]
+        filtered_items = [
+            item for item in self.inventory
+            if search_text in item["name"].lower()
+        ]
         self.update_inventory_display(filtered_items)
 
     def show_popup(self, message):
