@@ -1,12 +1,12 @@
 from rest_framework.decorators import action
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
-from .models import Item
-from .serializers import ItemSerializer
+from .models import Item, TradeRequest
+from .serializers import ItemSerializer, TradeRequestSerializer
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
@@ -76,3 +76,43 @@ def register(request):
     else:
         form = UserCreationForm()
     return render(request, 'register.html', {'form': form})
+
+
+class TradeRequestViewSet(viewsets.ModelViewSet):
+    queryset = TradeRequest.objects.all()
+    serializer_class = TradeRequestSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return TradeRequest.objects.filter(to_user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(from_user=self.request.user, status='pending')
+
+    @action(detail=True, methods=['post'])
+    def accept(self, request, pk=None):
+        trade = self.get_object()
+        if trade.to_user != request.user:
+            return Response({"error": "Permissão negada"}, status=403)
+
+        # Trocar os itens entre os usuários
+        trade.status = 'accepted'
+        trade.save()
+
+        # Atualizar donos dos itens
+        trade.from_item.owner = trade.to_user
+        trade.to_item.owner = trade.from_user
+        trade.from_item.save()
+        trade.to_item.save()
+
+        return Response({"status": "accepted"})
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        trade = self.get_object()
+        if trade.to_user != request.user:
+            return Response({"error": "Permissão negada"}, status=403)
+
+        trade.status = 'rejected'
+        trade.save()
+        return Response({"status": "rejected"})

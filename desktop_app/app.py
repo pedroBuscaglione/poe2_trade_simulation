@@ -3,7 +3,7 @@ import random
 import requests
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton, QLabel,
-    QListWidget, QMessageBox, QLineEdit, QHBoxLayout
+    QListWidget, QMessageBox, QLineEdit, QHBoxLayout, QDialog
 )
 
 API_URL = "http://127.0.0.1:8000"  # Django API URL
@@ -22,14 +22,60 @@ if not is_server_online():
     print("⚠️ O servidor Django não está online. Execute `python manage.py runserver` e tente novamente.")
     exit()
 
-class TradeApp(QWidget):
+class LoginWindow(QDialog):
     def __init__(self):
         super().__init__()
+        self.setWindowTitle("Login")
+        self.setGeometry(200, 200, 300, 150)
 
-        self.token = self.get_token() 
-        self.inventory = self.fetch_inventory()  # Fetch items first!
-        self.init_ui()  
-        self.load_inventory()  # Load inventory after fetching
+        self.layout = QVBoxLayout()
+
+        self.username_input = QLineEdit()
+        self.username_input.setPlaceholderText("Usuário")
+
+        self.password_input = QLineEdit()
+        self.password_input.setPlaceholderText("Senha")
+        self.password_input.setEchoMode(QLineEdit.Password)
+
+        self.login_button = QPushButton("Entrar")
+        self.login_button.clicked.connect(self.try_login)
+
+        self.layout.addWidget(QLabel("Usuário:"))
+        self.layout.addWidget(self.username_input)
+        self.layout.addWidget(QLabel("Senha:"))
+        self.layout.addWidget(self.password_input)
+        self.layout.addWidget(self.login_button)
+
+        self.setLayout(self.layout)
+
+    def try_login(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
+
+        try:
+            response = requests.post(f"{API_URL}/api-token-auth/", data={
+                "username": username,
+                "password": password
+            })
+            if response.status_code == 200:
+                token = response.json()['token']
+                self.accept()  # fecha o dialogo com sucesso
+                self.main_window = TradeApp(username, token)
+                self.main_window.show()
+            else:
+                QMessageBox.warning(self, "Erro", "Usuário ou senha inválidos.")
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro ao conectar: {e}")
+
+class TradeApp(QWidget):
+    def __init__(self, username, token):
+        super().__init__()
+        self.username = username
+        self.token = token
+        self.inventory = []
+
+        self.init_ui()
+        self.load_inventory()
 
     def init_ui(self):
         self.setWindowTitle("Trade Simulator - Inventário")
@@ -52,6 +98,9 @@ class TradeApp(QWidget):
         self.remove_button = QPushButton("Remover Item Selecionado")
         self.remove_button.clicked.connect(self.remove_selected_item)
 
+        self.remove_all_button = QPushButton("Remover Todos")
+        self.remove_all_button.clicked.connect(self.remove_all_items)
+
         # Lista de inventário
         self.inventory_list = QListWidget()
 
@@ -61,6 +110,7 @@ class TradeApp(QWidget):
 
         bottom_layout.addWidget(self.generate_button)
         bottom_layout.addWidget(self.remove_button)
+        bottom_layout.addWidget(self.remove_all_button)
 
         main_layout.addLayout(top_layout)
         main_layout.addWidget(self.inventory_list)
@@ -225,6 +275,30 @@ class TradeApp(QWidget):
         except requests.exceptions.RequestException as e:
             print(f"Error updating/removing item: {e}")
 
+    def remove_all_items(self):
+        confirm = QMessageBox.question(
+            self,
+            "Confirmação",
+            "Tem certeza que deseja remover todos os itens?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if confirm == QMessageBox.Yes:
+            headers = {"Authorization": f"Token {self.token}"} if self.token else {}
+            try:
+                # Busca todos os itens do usuário
+                response = requests.get(f"{API_URL}/api/items/", headers=headers)
+                if response.status_code == 200:
+                    items = response.json()
+                    for item in items:
+                        item_id = item["id"]
+                        delete_response = requests.delete(f"{API_URL}/api/items/{item_id}/", headers=headers)
+                        print(f"Item {item['name']} removido. Status:", delete_response.status_code)
+                    
+                    self.inventory.clear()
+                    self.update_inventory_display()
+            except Exception as e:
+                print("Erro ao remover todos os itens:", e)
 
 
     def filter_inventory(self):
@@ -244,7 +318,10 @@ class TradeApp(QWidget):
 
 
 if __name__ == "__main__":
+    import sys
+
     app = QApplication(sys.argv)
-    window = TradeApp()
-    window.show()
-    sys.exit(app.exec_())
+
+    login = LoginWindow()
+    if login.exec_() == QDialog.Accepted:
+        sys.exit(app.exec_())
