@@ -10,6 +10,7 @@ from .serializers import ItemSerializer, TradeRequestSerializer
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
@@ -56,11 +57,6 @@ class CustomAuthToken(ObtainAuthToken):
 
 def home(request):
     return render(request, 'home.html')
-
-@login_required
-def trade(request):
-    items = Item.objects.filter(is_available=True).select_related('owner')
-    return render(request, 'trade.html', {'items': items})
 
 def register(request):
     if request.method == 'POST':
@@ -116,3 +112,34 @@ class TradeRequestViewSet(viewsets.ModelViewSet):
         trade.status = 'rejected'
         trade.save()
         return Response({"status": "rejected"})
+    
+@login_required
+def trade_view(request):
+    meu_inventario = Item.objects.filter(owner=request.user)
+    outros_inventarios = Item.objects.exclude(owner=request.user)
+
+    return render(request, 'myapp/trade.html', {
+        'meus_itens': meu_inventario,
+        'outros_itens': outros_inventarios
+    })
+
+@require_POST
+@login_required
+def enviar_troca(request):
+    from_item_id = request.POST.get("from_item")
+    to_item_id = request.POST.get("to_item")
+    to_user_id = request.POST.get("to_user")
+
+    try:
+        from_item = Item.objects.get(id=from_item_id, owner=request.user)
+        to_item = Item.objects.get(id=to_item_id)
+        TradeRequest.objects.create(
+            from_user=request.user,
+            to_user_id=to_user_id,
+            from_item=from_item,
+            to_item=to_item
+        )
+    except Exception as e:
+        print("Erro ao criar troca:", e)
+
+    return redirect('trade')

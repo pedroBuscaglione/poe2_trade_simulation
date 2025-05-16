@@ -156,6 +156,46 @@ class TradeApp(QWidget):
         except requests.exceptions.RequestException as e:
             print(f"Error fetching inventory: {e}")
         return []
+    
+    def fetch_trade_requests(self):
+        headers = {"Authorization": f"Token {self.token}"}
+        try:
+            response = requests.get(f"{API_URL}/api/trades/", headers=headers)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                print("Erro ao buscar trocas:", response.status_code)
+        except Exception as e:
+            print("Erro ao buscar trocas:", e)
+        return []
+    
+    def check_trade_notifications(self):
+        trades = self.fetch_trade_requests()
+        for trade in trades:
+            if trade["status"] == "pending":
+                resposta = QMessageBox.question(
+                    self,
+                    "Solicitação de Troca",
+                    f"{trade['from_user']} quer trocar o item \"{trade['to_item']}\" pelo seu \"{trade['from_item']}\".\n\nDeseja aceitar?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if resposta == QMessageBox.Yes:
+                    self.respond_trade(trade["id"], aceitar=True)
+                else:
+                    self.respond_trade(trade["id"], aceitar=False)
+
+    def respond_trade(self, trade_id, aceitar=True):
+        action = "accept" if aceitar else "reject"
+        headers = {"Authorization": f"Token {self.token}"}
+        try:
+            response = requests.post(f"{API_URL}/api/trades/{trade_id}/{action}/", headers=headers)
+            if response.status_code == 200:
+                print(f"Troca {action}ed com sucesso.")
+                self.load_inventory()
+            else:
+                print(f"Erro ao {action} troca:", response.status_code, response.text)
+        except Exception as e:
+            print("Erro ao responder troca:", e)
 
     def generate_item(self):
         print("🛠️ Gerando item aleatório...")
@@ -200,6 +240,7 @@ class TradeApp(QWidget):
     def load_inventory(self):
         self.inventory = self.fetch_inventory()
         self.update_inventory_display()
+        self.check_trade_notifications()  # Check for trade requests
 
     def update_inventory_display(self, filtered_items=None):
         """Updates the inventory UI list with item details."""
