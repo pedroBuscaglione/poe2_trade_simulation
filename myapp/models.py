@@ -31,3 +31,11 @@ class TradeRequest(models.Model):
 
     def __str__(self):
         return f"{self.from_user.username} ↔ {self.to_user.username} ({self.status})"
+    
+class OnlineStatus(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    is_online = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {'Online' if self.is_online else 'Offline'}"

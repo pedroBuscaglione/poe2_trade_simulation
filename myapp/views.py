@@ -5,9 +5,10 @@ from rest_framework import status
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
-from .models import Item, TradeRequest
+from .models import Item, TradeRequest, OnlineStatus
 from .serializers import ItemSerializer, TradeRequestSerializer
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
@@ -115,13 +116,28 @@ class TradeRequestViewSet(viewsets.ModelViewSet):
     
 @login_required
 def trade_view(request):
-    meu_inventario = Item.objects.filter(owner=request.user)
-    outros_inventarios = Item.objects.exclude(owner=request.user)
+    meus_itens = Item.objects.filter(owner=request.user)
+
+    # Filtra usuários online (exceto o próprio)
+    online_users = OnlineStatus.objects.filter(is_online=True).exclude(user=request.user).values_list('user_id', flat=True)
+    outros_itens = Item.objects.filter(owner__id__in=online_users)
 
     return render(request, 'myapp/trade.html', {
-        'meus_itens': meu_inventario,
-        'outros_itens': outros_inventarios
+        'meus_itens': meus_itens,
+        'outros_itens': outros_itens
     })
+
+@csrf_exempt
+@login_required
+def set_online(request):
+    OnlineStatus.objects.update_or_create(user=request.user, defaults={'is_online': True})
+    return JsonResponse({"status": "online"})
+
+@csrf_exempt
+@login_required
+def set_offline(request):
+    OnlineStatus.objects.update_or_create(user=request.user, defaults={'is_online': False})
+    return JsonResponse({"status": "offline"})
 
 @require_POST
 @login_required

@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import ItemViewSet, CustomAuthToken, TradeRequestViewSet
-from .views import home, trade_view, register, enviar_troca
+from .views import home, trade_view, register, enviar_troca, set_online, set_offline
 
 router = DefaultRouter()
 router.register(r'items', ItemViewSet, basename='item')  # Enables the new update_quantity route
@@ -14,4 +14,6 @@ urlpatterns = [
     path('trade/send/', enviar_troca, name='enviar_troca'),
     path('api-token-auth/', CustomAuthToken.as_view(), name='api_token_auth'),
     path('register/', register, name='register'),
+    path('api/set_online/', set_online, name='set_online'),
+    path('api/set_offline/', set_offline, name='set_offline'),
 ]

@@ -59,6 +59,7 @@ class LoginWindow(QDialog):
             })
             if response.status_code == 200:
                 token = response.json()['token']
+                requests.post(f"{API_URL}/api/set_online/", headers={"Authorization": f"Token {token}"}) # Marcar como online
                 self.accept()  # fecha o dialogo com sucesso
                 self.main_window = TradeApp(username, token)
                 self.main_window.show()
@@ -350,6 +351,21 @@ class TradeApp(QWidget):
             if search_text in item["name"].lower()
         ]
         self.update_inventory_display(filtered_items)
+    
+    def ready(self):
+        import myapp.signals
+
+    def closeEvent(self, event):
+        try:
+            headers = {"Authorization": f"Token {self.token}"}
+            response = requests.post(f"{API_URL}/api/set_offline/", headers=headers)
+            if response.status_code == 200:
+                print("✅ Status offline enviado com sucesso.")
+            else:
+                print("⚠️ Erro ao enviar status offline:", response.status_code)
+        except Exception as e:
+            print("❌ Erro ao enviar status offline:", e)
+        event.accept()
 
     def show_popup(self, message):
         msg = QMessageBox()
