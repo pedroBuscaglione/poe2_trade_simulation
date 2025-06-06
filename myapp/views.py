@@ -19,28 +19,20 @@ from django.contrib import messages
 from .forms import RegisterForm
 
 class ItemViewSet(viewsets.ModelViewSet):
-    queryset = Item.objects.all()
     serializer_class = ItemSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        # Só retorna os itens do usuário autenticado
+        # O app usa o token para autenticar, então retorna só os itens do usuário logado
         return Item.objects.filter(owner=self.request.user)
 
     def perform_create(self, serializer):
-        # Ao criar um item, define automaticamente o owner
+        # Garante que o item criado será do usuário logado
         serializer.save(owner=self.request.user)
 
     @action(detail=True, methods=['post'])
     def update_quantity(self, request, pk=None):
-        """Custom endpoint to update item quantity"""
         item = self.get_object()
-
-        # Verifica se o item pertence ao usuário autenticado
-        if item.owner != request.user:
-            return Response({"error": "You do not have permission to modify this item."},
-                            status=status.HTTP_403_FORBIDDEN)
-
         new_quantity = request.data.get("quantity", None)
 
         if new_quantity is not None and int(new_quantity) >= 0:
@@ -57,7 +49,7 @@ class CustomAuthToken(ObtainAuthToken):
         return Response({'token': token.key, 'user_id': token.user_id, 'username': token.user.username})
 
 def home(request):
-    return render(request, 'home.html')
+    return render(request, 'myapp/home.html')
 
 def register(request):
     if request.method == 'POST':
@@ -118,9 +110,10 @@ class TradeRequestViewSet(viewsets.ModelViewSet):
 def trade_view(request):
     meus_itens = Item.objects.filter(owner=request.user)
 
-    # Filtra usuários online (exceto o próprio)
-    online_users = OnlineStatus.objects.filter(is_online=True).exclude(user=request.user).values_list('user_id', flat=True)
-    outros_itens = Item.objects.filter(owner__id__in=online_users)
+    online_users = OnlineStatus.objects.filter(is_online=True).exclude(user=request.user)
+    online_user_ids = online_users.values_list('user_id', flat=True)
+
+    outros_itens = Item.objects.filter(owner__id__in=online_user_ids)
 
     return render(request, 'myapp/trade.html', {
         'meus_itens': meus_itens,

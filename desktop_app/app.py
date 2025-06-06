@@ -7,9 +7,6 @@ from PyQt5.QtWidgets import (
 )
 
 API_URL = "http://127.0.0.1:8000"  # Django API URL
-USERNAME = "Glione"
-PASSWORD = "Pe2005dro!@#"
-
 
 def is_server_online():
     try:
@@ -58,8 +55,7 @@ class LoginWindow(QDialog):
                 "password": password
             })
             if response.status_code == 200:
-                token = response.json()['token']
-                requests.post(f"{API_URL}/api/set_online/", headers={"Authorization": f"Token {token}"}) # Marcar como online
+                token = response.json()['token'] # Marcar como online
                 self.accept()  # fecha o dialogo com sucesso
                 self.main_window = TradeApp(username, token)
                 self.main_window.show()
@@ -119,23 +115,6 @@ class TradeApp(QWidget):
 
         self.setLayout(main_layout)
 
-    def get_token(self):
-        url = f"{API_URL}/api-token-auth/"
-        data = {
-            "username": USERNAME,
-            "password": PASSWORD
-        }
-        try:
-            response = requests.post(url, data=data)
-            if response.status_code == 200:
-                print("🔐 Token obtido com sucesso.")
-                return response.json()['token']
-            else:
-                print("Erro ao obter token:", response.status_code, response.text)
-                return None
-        except requests.exceptions.RequestException as e:
-            print("Erro de conexão ao obter token:", e)
-            return None
 
     def fetch_inventory(self):
         try:
@@ -231,7 +210,6 @@ class TradeApp(QWidget):
                     })
 
                 self.update_inventory_display()
-                self.label.setText(f"Generated: {item_name}")
                 self.show_popup(f"You found: {item_name} ({rarity}) x{quantity}!")
             else:
                 print("❌ Erro ao criar item:", response.status_code)
